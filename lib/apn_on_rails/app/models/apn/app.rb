@@ -23,7 +23,7 @@ class APN::App < APN::Base
       raise APN::Errors::MissingCertificateError.new
       return
     end
-    APN::App.send_notifications_for_cert(self.cert, self.id)
+    APN::App.send_notifications_for_cert(self.cert, self.id, self.passphrase)
   end
 
   def self.send_notifications
@@ -33,11 +33,11 @@ class APN::App < APN::Base
     end
     if !configatron.apn.cert.blank?
       global_cert = File.read(configatron.apn.cert)
-      send_notifications_for_cert(global_cert, nil)
+      send_notifications_for_cert(global_cert, nil, configatron.apn.passphrase)
     end
   end
 
-  def self.send_notifications_for_cert(the_cert, app_id)
+  def self.send_notifications_for_cert(the_cert, app_id, passphrase)
     # unless self.unsent_notifications.nil? || self.unsent_notifications.empty?
       if (app_id == nil)
         conditions = "app_id is null"
@@ -45,7 +45,7 @@ class APN::App < APN::Base
         conditions = ["app_id = ?", app_id]
       end
       begin
-        APN::Connection.open_for_delivery({:cert => the_cert}) do |conn, sock|
+        APN::Connection.open_for_delivery({:cert => the_cert, :passphrase => passphrase}) do |conn, sock|
           APN::Device.find_each(:conditions => conditions) do |dev|
             dev.unsent_notifications.each do |noty|
               conn.write(noty.message_for_sending)
@@ -66,7 +66,7 @@ class APN::App < APN::Base
       return
     end
     unless self.unsent_group_notifications.nil? || self.unsent_group_notifications.empty?
-      APN::Connection.open_for_delivery({:cert => self.cert}) do |conn, sock|
+      APN::Connection.open_for_delivery({:cert => the_cert, :passphrase => ""}) do |conn, sock| #todo: passphrase somehow needs to go here, but we don't do group notes 
         unsent_group_notifications.each do |gnoty|
           gnoty.devices.find_each do |device|
             conn.write(gnoty.message_for_sending(device))
