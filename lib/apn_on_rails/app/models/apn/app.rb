@@ -33,19 +33,17 @@ class APN::App < APN::Base
     end
     if !configatron.apn.cert.blank?
       global_cert = File.read(configatron.apn.cert)
-      send_notifications_for_cert(global_cert, nil, configatron.apn.passphrase)
+      APN::App.send_notifications_for_cert(global_cert, nil, configatron.apn.passphrase)
     end
   end
 
   def self.send_notifications_for_cert(the_cert, app_id, passphrase)
     # unless self.unsent_notifications.nil? || self.unsent_notifications.empty?
-      if (app_id == nil)
-        conditions = "app_id is null"
-      else
-        conditions = ["app_id = ?", app_id]
-      end
+    if (app_id == nil) #find unsent by devices
+      conditions = "app_id is null"
       begin
         APN::Connection.open_for_delivery({:cert => the_cert, :passphrase => passphrase}) do |conn, sock|
+          puts "conn: #{conn}, sock: #{sock}"
           APN::Device.find_each(:conditions => conditions) do |dev|
             dev.unsent_notifications.each do |noty|
               conn.write(noty.message_for_sending)
@@ -57,7 +55,21 @@ class APN::App < APN::Base
       rescue Exception => e
         log_connection_exception(e)
       end
-    # end
+    else #do it by app 
+      begin
+        app = APN::App.find(app_id)
+        APN::Connection.open_for_delivery({:cert => app.cert, :passphrase => app.passphrase}) do |conn, sock|
+          puts "conn: #{conn}, sock: #{sock}"
+          app.unsent_notifications.each do |noty|
+            conn.write(noty.message_for_sending)
+            noty.sent_at = Time.now
+            noty.save
+          end
+        end
+      rescue Exception => e
+        log_connection_exception(e)
+      end
+    end
   end
 
   def send_group_notifications
